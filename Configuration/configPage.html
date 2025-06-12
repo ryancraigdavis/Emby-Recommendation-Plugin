@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recommendation Plugin Configuration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="url"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .button {
+            background-color: #007acc;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .button:hover {
+            background-color: #005a9e;
+        }
+        .button.secondary {
+            background-color: #6c757d;
+        }
+        .button.secondary:hover {
+            background-color: #545b62;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .sync-info {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #007acc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Recommendation Plugin Configuration</h1>
+        
+        <div class="sync-info">
+            <h3>Sync Status</h3>
+            <p><strong>Last Sync:</strong> <span id="lastSyncTime">Never</span></p>
+            <button class="button" onclick="performSync()">Manual Sync</button>
+            <button class="button secondary" onclick="testConnection()">Test Connection</button>
+        </div>
+
+        <div id="statusMessage" class="status"></div>
+
+        <form id="configForm">
+            <div class="section">
+                <h2>Microservice Configuration</h2>
+                
+                <div class="form-group">
+                    <label for="MicroserviceBaseUrl">Microservice Base URL:</label>
+                    <input type="url" id="MicroserviceBaseUrl" name="MicroserviceBaseUrl" required />
+                </div>
+                
+                <div class="form-group">
+                    <label for="ApiKey">API Key:</label>
+                    <input type="text" id="ApiKey" name="ApiKey" required />
+                </div>
+                
+                <div class="form-group">
+                    <label for="HttpTimeoutSeconds">HTTP Timeout (seconds):</label>
+                    <input type="number" id="HttpTimeoutSeconds" name="HttpTimeoutSeconds" min="5" max="300" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Sync Settings</h2>
+                
+                <div class="form-group">
+                    <label for="SyncIntervalMinutes">Sync Interval (minutes):</label>
+                    <input type="number" id="SyncIntervalMinutes" name="SyncIntervalMinutes" min="5" max="1440" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Kafka Configuration</h2>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="EnableKafkaEvents" name="EnableKafkaEvents" />
+                    <label for="EnableKafkaEvents">Enable Kafka Events</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="KafkaBootstrapServers">Kafka Bootstrap Servers:</label>
+                    <input type="text" id="KafkaBootstrapServers" name="KafkaBootstrapServers" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="KafkaTopic">Kafka Topic:</label>
+                    <input type="text" id="KafkaTopic" name="KafkaTopic" />
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Recommendation Settings</h2>
+                
+                <div class="form-group">
+                    <label for="MaxRecommendationCollections">Max Recommendation Collections:</label>
+                    <input type="number" id="MaxRecommendationCollections" name="MaxRecommendationCollections" min="1" max="50" />
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="AutoCreateCollections" name="AutoCreateCollections" />
+                    <label for="AutoCreateCollections">Auto Create Collections</label>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Debug Settings</h2>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="EnableDebugLogging" name="EnableDebugLogging" />
+                    <label for="EnableDebugLogging">Enable Debug Logging</label>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <button type="submit" class="button">Save Configuration</button>
+                <button type="button" class="button secondary" onclick="loadConfig()">Reset</button>
+            </div>
+        </form>
+    </div>
+
+    <script type="text/javascript">
+        var RecommendationConfigPage = {
+            pluginUniqueId: "8c95c4d2-e50c-4fb0-a4f6-8b7c9e3d2a1b",
+            
+            loadConfiguration: function() {
+                Dashboard.showLoadingMsg();
+                
+                ApiClient.getPluginConfiguration(RecommendationConfigPage.pluginUniqueId).then(function(config) {
+                    // Populate form fields
+                    document.getElementById('MicroserviceBaseUrl').value = config.MicroserviceBaseUrl || '';
+                    document.getElementById('ApiKey').value = config.ApiKey || '';
+                    document.getElementById('HttpTimeoutSeconds').value = config.HttpTimeoutSeconds || 30;
+                    document.getElementById('SyncIntervalMinutes').value = config.SyncIntervalMinutes || 60;
+                    document.getElementById('EnableKafkaEvents').checked = config.EnableKafkaEvents || false;
+                    document.getElementById('KafkaBootstrapServers').value = config.KafkaBootstrapServers || '';
+                    document.getElementById('KafkaTopic').value = config.KafkaTopic || '';
+                    document.getElementById('MaxRecommendationCollections').value = config.MaxRecommendationCollections || 10;
+                    document.getElementById('AutoCreateCollections').checked = config.AutoCreateCollections || false;
+                    document.getElementById('EnableDebugLogging').checked = config.EnableDebugLogging || false;
+                    
+                    // Update last sync time
+                    var lastSyncElement = document.getElementById('lastSyncTime');
+                    if (config.LastSyncTime) {
+                        lastSyncElement.textContent = new Date(config.LastSyncTime).toLocaleString();
+                    } else {
+                        lastSyncElement.textContent = 'Never';
+                    }
+                    
+                    Dashboard.hideLoadingMsg();
+                }).catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    RecommendationConfigPage.showStatus('Error loading configuration: ' + error.message, 'error');
+                });
+            },
+            
+            saveConfiguration: function() {
+                Dashboard.showLoadingMsg();
+                
+                var config = {
+                    MicroserviceBaseUrl: document.getElementById('MicroserviceBaseUrl').value,
+                    ApiKey: document.getElementById('ApiKey').value,
+                    HttpTimeoutSeconds: parseInt(document.getElementById('HttpTimeoutSeconds').value),
+                    SyncIntervalMinutes: parseInt(document.getElementById('SyncIntervalMinutes').value),
+                    EnableKafkaEvents: document.getElementById('EnableKafkaEvents').checked,
+                    KafkaBootstrapServers: document.getElementById('KafkaBootstrapServers').value,
+                    KafkaTopic: document.getElementById('KafkaTopic').value,
+                    MaxRecommendationCollections: parseInt(document.getElementById('MaxRecommendationCollections').value),
+                    AutoCreateCollections: document.getElementById('AutoCreateCollections').checked,
+                    EnableDebugLogging: document.getElementById('EnableDebugLogging').checked
+                };
+                
+                ApiClient.updatePluginConfiguration(RecommendationConfigPage.pluginUniqueId, config).then(function() {
+                    Dashboard.hideLoadingMsg();
+                    RecommendationConfigPage.showStatus('Configuration saved successfully!', 'success');
+                }).catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    RecommendationConfigPage.showStatus('Error saving configuration: ' + error.message, 'error');
+                });
+            },
+            
+            showStatus: function(message, type) {
+                var statusElement = document.getElementById('statusMessage');
+                statusElement.textContent = message;
+                statusElement.className = 'status ' + type;
+                statusElement.style.display = 'block';
+                
+                setTimeout(function() {
+                    statusElement.style.display = 'none';
+                }, 5000);
+            }
+        };
+
+        function loadConfig() {
+            RecommendationConfigPage.loadConfiguration();
+        }
+
+        function performSync() {
+            RecommendationConfigPage.showStatus('Sync functionality not yet implemented', 'error');
+        }
+
+        function testConnection() {
+            RecommendationConfigPage.showStatus('Connection test functionality not yet implemented', 'error');
+        }
+
+        // Initialize form
+        document.addEventListener('DOMContentLoaded', function() {
+            RecommendationConfigPage.loadConfiguration();
+            
+            document.getElementById('configForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                RecommendationConfigPage.saveConfiguration();
+            });
+        });
+    </script>
+</body>
+</html>
