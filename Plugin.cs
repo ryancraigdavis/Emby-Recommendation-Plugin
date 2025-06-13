@@ -37,23 +37,15 @@ namespace Emby.Recommendation.Plugin
                 {
                     Name = this.Name,
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
+                },
+                new PluginPageInfo
+                {
+                    Name = "RecommendationHomeScreen",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.homescreen.js"
                 }
             };
         }
 
-        public override void OnConfigurationUpdated()
-        {
-            base.OnConfigurationUpdated();
-            _logger.LogInformation("Plugin configuration updated");
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _logger.LogInformation("Recommendation Plugin disposing");
-            }
-            base.Dispose(disposing);
-        }
+        // Configuration update handling can be done through events if needed
     }
 }

@@ -30,5 +30,7 @@ namespace Emby.Recommendation.Plugin.Configuration
         public int MaxRecommendationCollections { get; set; } = 10;
 
         public bool AutoCreateCollections { get; set; } = true;
+
+        public bool UseEmbyFallbackOnly { get; set; } = false;
     }
 }

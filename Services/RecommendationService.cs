@@ -149,9 +149,9 @@ namespace Emby.Recommendation.Plugin.Services
                 {
                     try
                     {
-                        var collectionName = GenerateCollectionName(group.Key, group.Value);
+                        var collectionName = GenerateCollectionName(group.Key, group);
                         var collection = await _collectionService.CreateRecommendationCollectionAsync(
-                            collectionName, group.Value, userId);
+                            collectionName, group, userId);
 
                         if (collection != null)
                         {

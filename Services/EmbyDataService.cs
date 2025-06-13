@@ -9,6 +9,8 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Session;
+using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Users;
 using Microsoft.Extensions.Logging;
 
 namespace Emby.Recommendation.Plugin.Services
@@ -28,17 +30,20 @@ namespace Emby.Recommendation.Plugin.Services
         private readonly ILibraryManager _libraryManager;
         private readonly ISessionManager _sessionManager;
         private readonly IUserManager _userManager;
+        private readonly IUserDataManager _userDataManager;
         private readonly ILogger<EmbyDataService> _logger;
 
         public EmbyDataService(
             ILibraryManager libraryManager,
             ISessionManager sessionManager, 
             IUserManager userManager,
+            IUserDataManager userDataManager,
             ILogger<EmbyDataService> logger)
         {
             _libraryManager = libraryManager ?? throw new ArgumentNullException(nameof(libraryManager));
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+            _userDataManager = userDataManager ?? throw new ArgumentNullException(nameof(userDataManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -56,8 +61,7 @@ namespace Emby.Recommendation.Plugin.Services
                 var query = new InternalItemsQuery(user)
                 {
                     Recursive = true,
-                    IsFolder = false,
-                    HasTmdbId = true
+                    IsFolder = false
                 };
 
                 if (!string.IsNullOrEmpty(mediaType))
@@ -98,7 +102,7 @@ namespace Emby.Recommendation.Plugin.Services
                 var item = _libraryManager.GetItemById(itemId);
                 if (item == null) return null;
 
-                return _libraryManager.GetUserData(user, item);
+                return _userDataManager.GetUserData(user, item);
             }
             catch (Exception ex)
             {
@@ -118,9 +122,7 @@ namespace Emby.Recommendation.Plugin.Services
                 {
                     Recursive = true,
                     IsFolder = false,
-                    HasTmdbId = true,
                     IsPlayed = true,
-                    OrderBy = new[] { (ItemSortBy.DatePlayed, SortOrder.Descending) },
                     Limit = limit
                 };
 
@@ -151,7 +153,9 @@ namespace Emby.Recommendation.Plugin.Services
         {
             try
             {
-                return await Task.FromResult(_userManager.Users);
+                var userQuery = new UserQuery();
+                var result = _userManager.GetUsers(userQuery);
+                return await Task.FromResult(result.Items);
             }
             catch (Exception ex)
             {

@@ -179,6 +179,15 @@
                     <input type="checkbox" id="EnableDebugLogging" name="EnableDebugLogging" />
                     <label for="EnableDebugLogging">Enable Debug Logging</label>
                 </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="UseEmbyFallbackOnly" name="UseEmbyFallbackOnly" />
+                    <label for="UseEmbyFallbackOnly">Use Emby Fallback Recommendations Only (for testing)</label>
+                </div>
+                <p style="margin-top: 5px; color: #666; font-size: 0.9em;">
+                    When enabled, skips AI service and uses Emby's built-in recommendations. 
+                    Perfect for testing before your recommendation API is ready.
+                </p>
             </div>
 
             <div style="margin-top: 30px;">
@@ -207,6 +216,7 @@
                     document.getElementById('MaxRecommendationCollections').value = config.MaxRecommendationCollections || 10;
                     document.getElementById('AutoCreateCollections').checked = config.AutoCreateCollections || false;
                     document.getElementById('EnableDebugLogging').checked = config.EnableDebugLogging || false;
+                    document.getElementById('UseEmbyFallbackOnly').checked = config.UseEmbyFallbackOnly || false;
                     
                     // Update last sync time
                     var lastSyncElement = document.getElementById('lastSyncTime');
@@ -236,7 +246,8 @@
                     KafkaTopic: document.getElementById('KafkaTopic').value,
                     MaxRecommendationCollections: parseInt(document.getElementById('MaxRecommendationCollections').value),
                     AutoCreateCollections: document.getElementById('AutoCreateCollections').checked,
-                    EnableDebugLogging: document.getElementById('EnableDebugLogging').checked
+                    EnableDebugLogging: document.getElementById('EnableDebugLogging').checked,
+                    UseEmbyFallbackOnly: document.getElementById('UseEmbyFallbackOnly').checked
                 };
                 
                 ApiClient.updatePluginConfiguration(RecommendationConfigPage.pluginUniqueId, config).then(function() {
@@ -257,6 +268,69 @@
                 setTimeout(function() {
                     statusElement.style.display = 'none';
                 }, 5000);
+            },
+            
+            performManualSync: function() {
+                Dashboard.showLoadingMsg();
+                RecommendationConfigPage.showStatus('Starting sync...', 'success');
+                
+                fetch('/Plugins/RecommendationPlugin/Sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Emby-Token': ApiClient.accessToken()
+                    }
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(result) {
+                    Dashboard.hideLoadingMsg();
+                    
+                    if (result.Success) {
+                        RecommendationConfigPage.showStatus(result.Message, 'success');
+                        
+                        // Update last sync time
+                        var lastSyncElement = document.getElementById('lastSyncTime');
+                        if (result.LastSyncTime) {
+                            lastSyncElement.textContent = new Date(result.LastSyncTime).toLocaleString();
+                        }
+                        
+                        // Reload configuration to get updated LastSyncTime
+                        setTimeout(function() {
+                            RecommendationConfigPage.loadConfiguration();
+                        }, 1000);
+                    } else {
+                        RecommendationConfigPage.showStatus('Sync failed: ' + result.Message, 'error');
+                    }
+                }).catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    RecommendationConfigPage.showStatus('Sync error: ' + error.message, 'error');
+                });
+            },
+            
+            testConnection: function() {
+                Dashboard.showLoadingMsg();
+                RecommendationConfigPage.showStatus('Testing connection...', 'success');
+                
+                fetch('/Plugins/RecommendationPlugin/Test', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Emby-Token': ApiClient.accessToken()
+                    }
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(result) {
+                    Dashboard.hideLoadingMsg();
+                    
+                    if (result.Success) {
+                        RecommendationConfigPage.showStatus('Connection successful!', 'success');
+                    } else {
+                        RecommendationConfigPage.showStatus('Connection failed: ' + result.Message, 'error');
+                    }
+                }).catch(function(error) {
+                    Dashboard.hideLoadingMsg();
+                    RecommendationConfigPage.showStatus('Connection test error: ' + error.message, 'error');
+                });
             }
         };
 
@@ -265,11 +339,11 @@
         }
 
         function performSync() {
-            RecommendationConfigPage.showStatus('Sync functionality not yet implemented', 'error');
+            RecommendationConfigPage.performManualSync();
         }
 
         function testConnection() {
-            RecommendationConfigPage.showStatus('Connection test functionality not yet implemented', 'error');
+            RecommendationConfigPage.testConnection();
         }
 
         // Initialize form

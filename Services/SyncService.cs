@@ -105,7 +105,7 @@ namespace Emby.Recommendation.Plugin.Services
                         ItemType = item.GetType().Name,
                         TmdbId = GetTmdbId(item),
                         TvdbId = GetTvdbId(item),
-                        LastPlayedDate = userData.LastPlayedDate,
+                        LastPlayedDate = userData.LastPlayedDate?.DateTime,
                         PlaybackPositionTicks = userData.PlaybackPositionTicks,
                         PlayCount = userData.PlayCount,
                         IsFavorite = userData.IsFavorite,
@@ -120,7 +120,7 @@ namespace Emby.Recommendation.Plugin.Services
                         {
                             ItemId = item.Id,
                             Rating = userData.Rating.Value,
-                            RatedAt = userData.LastPlayedDate ?? DateTime.UtcNow
+                            RatedAt = userData.LastPlayedDate?.DateTime ?? DateTime.UtcNow
                         });
                     }
                 }
@@ -128,7 +128,7 @@ namespace Emby.Recommendation.Plugin.Services
                 var userSyncData = new UserSyncData
                 {
                     UserId = userId,
-                    UserName = user.Username,
+                    UserName = user.Name,
                     WatchHistory = watchData,
                     Ratings = ratings,
                     LastSyncTime = DateTime.UtcNow
@@ -172,8 +172,8 @@ namespace Emby.Recommendation.Plugin.Services
                             ItemType = item.GetType().Name,
                             TmdbId = GetTmdbId(item),
                             TvdbId = GetTvdbId(item),
-                            ImdbId = item.GetProviderId("Imdb"),
-                            PremiereDate = item.PremiereDate,
+                            ImdbId = item.ProviderIds.ContainsKey("Imdb") ? item.ProviderIds["Imdb"] : null,
+                            PremiereDate = item.PremiereDate?.DateTime,
                             Genres = item.Genres?.ToList() ?? new List<string>(),
                             Tags = item.Tags?.ToList() ?? new List<string>(),
                             Studios = item.Studios?.ToList() ?? new List<string>(),
@@ -181,8 +181,8 @@ namespace Emby.Recommendation.Plugin.Services
                             CommunityRating = item.CommunityRating,
                             OfficialRating = item.OfficialRating,
                             RunTimeTicks = item.RunTimeTicks,
-                            DateCreated = item.DateCreated,
-                            DateModified = item.DateModified
+                            DateCreated = item.DateCreated.DateTime,
+                            DateModified = item.DateModified.DateTime
                         };
 
                         var success = await _apiService.SyncContentMetadataAsync(contentMetadata);
@@ -218,7 +218,7 @@ namespace Emby.Recommendation.Plugin.Services
         public async Task UpdateLastSyncTimeAsync()
         {
             var config = Plugin.Instance?.Configuration;
-            if (config != null)
+            if (config != null && Plugin.Instance != null)
             {
                 config.LastSyncTime = DateTime.UtcNow;
                 Plugin.Instance.SaveConfiguration();
@@ -228,13 +228,13 @@ namespace Emby.Recommendation.Plugin.Services
 
         private int? GetTmdbId(BaseItem item)
         {
-            var providerId = item.GetProviderId("Tmdb");
+            var providerId = item.ProviderIds.ContainsKey("Tmdb") ? item.ProviderIds["Tmdb"] : null;
             return int.TryParse(providerId, out var tmdbId) ? tmdbId : null;
         }
 
         private int? GetTvdbId(BaseItem item)
         {
-            var providerId = item.GetProviderId("Tvdb");
+            var providerId = item.ProviderIds.ContainsKey("Tvdb") ? item.ProviderIds["Tvdb"] : null;
             return int.TryParse(providerId, out var tvdbId) ? tvdbId : null;
         }
     }
