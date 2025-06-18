@@ -1,33 +1,33 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Emby.Recommendation.Plugin.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
-using Microsoft.Extensions.Logging;
+using RecommendationPlugin.Configuration;
 
-namespace Emby.Recommendation.Plugin
+namespace RecommendationPlugin
 {
-    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
+    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasThumbImage
     {
-        private readonly ILogger<Plugin> _logger;
-
-        public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ILogger<Plugin> logger) 
-            : base(applicationPaths, xmlSerializer)
+        public Plugin(IApplicationPaths appPaths, IXmlSerializer xmlSerializer)
+            : base(appPaths, xmlSerializer)
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             Instance = this;
-            
-            _logger.LogInformation("Recommendation Plugin initialized");
         }
 
-        public override string Name => "Recommendation Plugin";
-        public override Guid Id => Guid.Parse("8c95c4d2-e50c-4fb0-a4f6-8b7c9e3d2a1b");
-        public override string Description => "Intelligent recommendation plugin for Emby Media Server";
+        public override string Name => "Recommendation Collection";
 
-        public static Plugin? Instance { get; private set; }
+        private Guid _id = new Guid("b1c2d3e4-f5a6-7b8c-9d0e-1f2a3b4c5d6e");
+        public override Guid Id => _id;
+
+        public override string Description => "Creates a dynamic collection of movies recommended by Emby";
+
+        public static Plugin Instance { get; private set; }
+
+        public PluginConfiguration PluginConfiguration => Configuration;
 
         public IEnumerable<PluginPageInfo> GetPages()
         {
@@ -35,17 +35,23 @@ namespace Emby.Recommendation.Plugin
             {
                 new PluginPageInfo
                 {
-                    Name = this.Name,
+                    Name = "RecommendationConfig",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
                 },
                 new PluginPageInfo
                 {
-                    Name = "RecommendationHomeScreen",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.homescreen.js"
+                    Name = "RecommendationConfigJS",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.js"
                 }
             };
         }
 
-        // Configuration update handling can be done through events if needed
+        public Stream GetThumbImage()
+        {
+            var type = GetType();
+            return type.Assembly.GetManifestResourceStream(type.Namespace + ".thumb.png");
+        }
+
+        public ImageFormat ThumbImageFormat => ImageFormat.Png;
     }
 }

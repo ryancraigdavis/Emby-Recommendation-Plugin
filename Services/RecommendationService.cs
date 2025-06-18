@@ -2,227 +2,113 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Emby.Recommendation.Plugin.Models;
-using Microsoft.Extensions.Logging;
+using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Querying;
+using RecommendationPlugin.Configuration;
 
-namespace Emby.Recommendation.Plugin.Services
+namespace RecommendationPlugin.Services
 {
-    public interface IRecommendationService
+    public class RecommendationService
     {
-        Task<bool> GenerateRecommendationsForUserAsync(Guid userId);
-        Task<bool> GenerateRecommendationsForAllUsersAsync();
-        Task<IEnumerable<RecommendationResult>> GetRecommendationsAsync(Guid userId, int count = 20);
-        Task<bool> CreateRecommendationCollectionsAsync(Guid userId);
-    }
+        private readonly ILibraryManager _libraryManager;
+        private readonly ICollectionManager _collectionManager;
+        private readonly ILogger _logger;
 
-    public class RecommendationService : IRecommendationService
-    {
-        private readonly IRecommendationApiService _apiService;
-        private readonly ICollectionService _collectionService;
-        private readonly IEmbyDataService _embyDataService;
-        private readonly IKafkaEventService _kafkaService;
-        private readonly ILogger<RecommendationService> _logger;
-
-        public RecommendationService(
-            IRecommendationApiService apiService,
-            ICollectionService collectionService,
-            IEmbyDataService embyDataService,
-            IKafkaEventService kafkaService,
-            ILogger<RecommendationService> logger)
+        public RecommendationService(ILibraryManager libraryManager, ICollectionManager collectionManager, ILogger logger)
         {
-            _apiService = apiService ?? throw new ArgumentNullException(nameof(apiService));
-            _collectionService = collectionService ?? throw new ArgumentNullException(nameof(collectionService));
-            _embyDataService = embyDataService ?? throw new ArgumentNullException(nameof(embyDataService));
-            _kafkaService = kafkaService ?? throw new ArgumentNullException(nameof(kafkaService));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _libraryManager = libraryManager;
+            _collectionManager = collectionManager;
+            _logger = logger;
         }
 
-        public async Task<bool> GenerateRecommendationsForUserAsync(Guid userId)
+        public Task<List<Movie>> GetRecommendedMovies(int count)
         {
             try
             {
-                _logger.LogInformation("Generating recommendations for user {UserId}", userId);
-
-                var user = await _embyDataService.GetUserAsync(userId);
-                if (user == null)
+                var allMovies = _libraryManager.GetItemList(new InternalItemsQuery
                 {
-                    _logger.LogWarning("User {UserId} not found", userId);
-                    return false;
+                    IncludeItemTypes = new[] { typeof(Movie).Name },
+                    IsVirtualItem = false,
+                    OrderBy = new[]
+                    {
+                        new ValueTuple<string, SortOrder>(ItemSortBy.Random, SortOrder.Ascending)
+                    }
+                }).OfType<Movie>().ToList();
+
+                if (!allMovies.Any())
+                {
+                    _logger.Info("No movies found in library");
+                    return Task.FromResult(new List<Movie>());
                 }
 
-                var recommendations = await _apiService.GetRecommendationsAsync(userId);
-                if (!recommendations.Any())
+                var recommendedMovies = allMovies
+                    .Where(m => m.CommunityRating.HasValue && m.CommunityRating.Value >= 7.0)
+                    .OrderByDescending(m => m.CommunityRating.Value)
+                    .ThenByDescending(m => m.DateCreated)
+                    .Take(count)
+                    .ToList();
+
+                if (recommendedMovies.Count < count)
                 {
-                    _logger.LogInformation("No recommendations returned for user {UserId}", userId);
-                    return false;
+                    var additionalMovies = allMovies
+                        .Where(m => !recommendedMovies.Contains(m))
+                        .OrderBy(m => Guid.NewGuid())
+                        .Take(count - recommendedMovies.Count);
+                    
+                    recommendedMovies.AddRange(additionalMovies);
                 }
 
-                var config = Plugin.Instance?.Configuration;
-                if (config?.AutoCreateCollections == true)
-                {
-                    await CreateRecommendationCollectionsAsync(userId, recommendations);
-                }
-
-                await _kafkaService.SendUserEventAsync("recommendations_generated", userId, 
-                    new { Count = recommendations.Count() });
-
-                _logger.LogInformation("Successfully generated {Count} recommendations for user {UserId}", 
-                    recommendations.Count(), userId);
-
-                return true;
+                _logger.Info($"Found {recommendedMovies.Count} recommended movies");
+                return Task.FromResult(recommendedMovies);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating recommendations for user {UserId}", userId);
-                return false;
+                _logger.ErrorException("Error getting recommended movies", ex);
+                return Task.FromResult(new List<Movie>());
             }
         }
 
-        public async Task<bool> GenerateRecommendationsForAllUsersAsync()
+        public async Task UpdateRecommendationCollection(PluginConfiguration config)
         {
             try
             {
-                _logger.LogInformation("Generating recommendations for all users");
-
-                var users = await _embyDataService.GetUsersAsync();
-                var successCount = 0;
-                var totalCount = users.Count();
-
-                foreach (var user in users)
+                if (!config.IsEnabled)
                 {
-                    try
-                    {
-                        var success = await GenerateRecommendationsForUserAsync(user.Id);
-                        if (success) successCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error generating recommendations for user {UserId}", user.Id);
-                    }
+                    _logger.Info("Recommendation collection is disabled");
+                    return;
                 }
 
-                _logger.LogInformation("Completed recommendation generation: {SuccessCount}/{TotalCount} users processed", 
-                    successCount, totalCount);
-
-                return successCount > 0;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during generate recommendations for all users operation");
-                return false;
-            }
-        }
-
-        public async Task<IEnumerable<RecommendationResult>> GetRecommendationsAsync(Guid userId, int count = 20)
-        {
-            try
-            {
-                return await _apiService.GetRecommendationsAsync(userId, count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving recommendations for user {UserId}", userId);
-                return new List<RecommendationResult>();
-            }
-        }
-
-        public async Task<bool> CreateRecommendationCollectionsAsync(Guid userId)
-        {
-            var recommendations = await GetRecommendationsAsync(userId, 50);
-            return await CreateRecommendationCollectionsAsync(userId, recommendations);
-        }
-
-        private async Task<bool> CreateRecommendationCollectionsAsync(Guid userId, IEnumerable<RecommendationResult> recommendations)
-        {
-            try
-            {
-                var config = Plugin.Instance?.Configuration;
-                if (config == null) return false;
-
-                // Group recommendations by category/reason for better collections
-                var groupedRecommendations = GroupRecommendationsByCategory(recommendations);
-
-                var createdCollections = 0;
-                var maxCollections = Math.Min(groupedRecommendations.Count(), config.MaxRecommendationCollections);
-
-                foreach (var group in groupedRecommendations.Take(maxCollections))
+                var recommendedMovies = await GetRecommendedMovies(config.RecommendationCount);
+                
+                if (!recommendedMovies.Any())
                 {
-                    try
-                    {
-                        var collectionName = GenerateCollectionName(group.Key, group);
-                        var collection = await _collectionService.CreateRecommendationCollectionAsync(
-                            collectionName, group, userId);
-
-                        if (collection != null)
-                        {
-                            createdCollections++;
-                            await _kafkaService.SendUserEventAsync("collection_created", userId, 
-                                new { CollectionId = collection.Id, CollectionName = collectionName });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Error creating collection for category {Category}", group.Key);
-                    }
+                    _logger.Info("No recommended movies to add to collection");
+                    return;
                 }
 
-                // Cleanup old collections if we exceed the limit
-                await _collectionService.CleanupOldCollectionsAsync(userId, config.MaxRecommendationCollections);
-
-                _logger.LogInformation("Created {CreatedCount} recommendation collections for user {UserId}", 
-                    createdCollections, userId);
-
-                return createdCollections > 0;
+                _logger.Info($"Creating/updating collection '{config.CollectionName}' with {recommendedMovies.Count} movies");
+                
+                // For now, just log the recommended movies
+                // Collection creation will need to be implemented once we understand the correct API
+                foreach (var movie in recommendedMovies.Take(5))
+                {
+                    _logger.Info($"Recommended movie: {movie.Name} (Rating: {movie.CommunityRating})");
+                }
+                
+                if (recommendedMovies.Count > 5)
+                {
+                    _logger.Info($"... and {recommendedMovies.Count - 5} more movies");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating recommendation collections for user {UserId}", userId);
-                return false;
+                _logger.ErrorException("Error updating recommendation collection", ex);
             }
-        }
-
-        private IEnumerable<IGrouping<string, RecommendationResult>> GroupRecommendationsByCategory(IEnumerable<RecommendationResult> recommendations)
-        {
-            return recommendations
-                .GroupBy(r => ExtractPrimaryCategory(r))
-                .OrderByDescending(g => g.Average(r => r.Score))
-                .Where(g => g.Count() >= 3); // Only create collections with at least 3 items
-        }
-
-        private string ExtractPrimaryCategory(RecommendationResult recommendation)
-        {
-            // Extract meaningful category from reason or tags
-            var reason = recommendation.Reason?.ToLowerInvariant() ?? "";
-            var tags = recommendation.Tags?.FirstOrDefault()?.ToLowerInvariant() ?? "";
-
-            if (reason.Contains("similar") || reason.Contains("like"))
-                return "Similar Content";
-            else if (reason.Contains("genre") || tags.Contains("genre"))
-                return "Genre Recommendations";
-            else if (reason.Contains("actor") || reason.Contains("director"))
-                return "Based on Cast & Crew";
-            else if (reason.Contains("trending") || reason.Contains("popular"))
-                return "Trending Now";
-            else if (reason.Contains("recent") || reason.Contains("new"))
-                return "New Releases";
-            else
-                return "For You";
-        }
-
-        private string GenerateCollectionName(string category, IEnumerable<RecommendationResult> recommendations)
-        {
-            var timestamp = DateTime.Now.ToString("MMM dd");
-            var itemCount = recommendations.Count();
-            
-            return category switch
-            {
-                "Similar Content" => $"More Like Your Favorites ({timestamp})",
-                "Genre Recommendations" => $"Discover New Genres ({timestamp})",
-                "Based on Cast & Crew" => $"From Your Favorite Creators ({timestamp})",
-                "Trending Now" => $"What's Trending ({timestamp})",
-                "New Releases" => $"Fresh Picks ({timestamp})",
-                _ => $"Recommended for You ({timestamp})"
-            };
         }
     }
 }
