@@ -1,16 +1,15 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
-using RecommendationPlugin.Configuration;
+using EmbyTestPlugin.Configuration;
 
-namespace RecommendationPlugin
+namespace EmbyTestPlugin
 {
-    public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasThumbImage
+    public class Plugin : BasePlugin<PluginConfiguration>, IHasThumbImage
     {
         public Plugin(IApplicationPaths appPaths, IXmlSerializer xmlSerializer)
             : base(appPaths, xmlSerializer)
@@ -18,33 +17,13 @@ namespace RecommendationPlugin
             Instance = this;
         }
 
-        public override string Name => "Recommendation Collection";
+        public override string Name => "Test Collection Plugin";
 
-        private Guid _id = new Guid("b1c2d3e4-f5a6-7b8c-9d0e-1f2a3b4c5d6e");
-        public override Guid Id => _id;
+        public override Guid Id => new Guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
 
-        public override string Description => "Creates a dynamic collection of movies recommended by Emby";
+        public override string Description => "A simple test plugin that creates a collection of the first 5 alphabetical movies";
 
         public static Plugin Instance { get; private set; }
-
-        public PluginConfiguration PluginConfiguration => Configuration;
-
-        public IEnumerable<PluginPageInfo> GetPages()
-        {
-            return new[]
-            {
-                new PluginPageInfo
-                {
-                    Name = "RecommendationConfig",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
-                },
-                new PluginPageInfo
-                {
-                    Name = "RecommendationConfigJS",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.js"
-                }
-            };
-        }
 
         public Stream GetThumbImage()
         {

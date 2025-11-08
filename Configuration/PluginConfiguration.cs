@@ -1,18 +1,16 @@
 using MediaBrowser.Model.Plugins;
 
-namespace RecommendationPlugin.Configuration
+namespace EmbyTestPlugin.Configuration
 {
     public class PluginConfiguration : BasePluginConfiguration
     {
         public PluginConfiguration()
         {
-            RecommendationCount = 10;
-            CollectionName = "Recommended Movies";
-            IsEnabled = true;
+            CollectionName = "Test_collection";
+            MovieCount = 5;
         }
 
-        public int RecommendationCount { get; set; }
         public string CollectionName { get; set; }
-        public bool IsEnabled { get; set; }
+        public int MovieCount { get; set; }
     }
 }

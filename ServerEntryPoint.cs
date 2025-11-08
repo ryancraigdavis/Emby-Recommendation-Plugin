@@ -1,25 +1,28 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
-using RecommendationPlugin.Services;
+using MediaBrowser.Model.Querying;
 
-namespace RecommendationPlugin
+namespace EmbyTestPlugin
 {
     public class ServerEntryPoint : IServerEntryPoint
     {
         private readonly ILibraryManager _libraryManager;
         private readonly ICollectionManager _collectionManager;
         private readonly ILogger _logger;
-        public RecommendationService _recommendationService;
-        
-        public static ServerEntryPoint Instance { get; private set; }
-        
-        public ServerEntryPoint(ILibraryManager libraryManager, ICollectionManager collectionManager, ILogManager logManager)
+
+        public ServerEntryPoint(
+            ILibraryManager libraryManager,
+            ICollectionManager collectionManager,
+            ILogManager logManager)
         {
-            Instance = this;
             _libraryManager = libraryManager;
             _collectionManager = collectionManager;
             _logger = logManager.GetLogger(GetType().Name);
@@ -27,62 +30,100 @@ namespace RecommendationPlugin
 
         public void Run()
         {
-            _logger.Info("Recommendation Plugin starting up");
-            
-            _recommendationService = new RecommendationService(_libraryManager, _collectionManager, _logger);
-            
-            _libraryManager.ItemAdded += OnLibraryItemAdded;
-            _libraryManager.ItemRemoved += OnLibraryItemRemoved;
-            
+            _logger.Info("Test Collection Plugin starting up");
+
+            // Delay initialization to allow server to fully start
             Task.Run(async () =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(30));
-                await InitializeRecommendationCollection();
+                await Task.Delay(TimeSpan.FromSeconds(10));
+                await CreateTestCollection();
             });
         }
 
-        private void OnLibraryItemAdded(object sender, ItemChangeEventArgs e)
-        {
-            if (e.Item is MediaBrowser.Controller.Entities.Movies.Movie)
-            {
-                _logger.Debug("New movie added to library, will update recommendations on next scheduled task");
-            }
-        }
-
-        private void OnLibraryItemRemoved(object sender, ItemChangeEventArgs e)
-        {
-            if (e.Item is MediaBrowser.Controller.Entities.Movies.Movie)
-            {
-                _logger.Debug("Movie removed from library, will update recommendations on next scheduled task");
-            }
-        }
-
-        private async Task InitializeRecommendationCollection()
+        private async Task CreateTestCollection()
         {
             try
             {
                 var config = Plugin.Instance.Configuration;
-                if (config.IsEnabled)
+                var collectionName = config.CollectionName;
+
+                _logger.Info($"Creating/updating collection: {collectionName}");
+
+                // Get all movies from the library, sorted alphabetically
+                var movies = _libraryManager.GetItemList(new InternalItemsQuery
                 {
-                    _logger.Info("Initializing recommendation collection on startup");
-                    await _recommendationService.UpdateRecommendationCollection(config);
+                    IncludeItemTypes = new[] { typeof(Movie).Name },
+                    IsVirtualItem = false,
+                    Recursive = true,
+                    OrderBy = new[]
+                    {
+                        new ValueTuple<string, SortOrder>(ItemSortBy.SortName, SortOrder.Ascending)
+                    }
+                }).OfType<Movie>().ToList();
+
+                if (!movies.Any())
+                {
+                    _logger.Warn("No movies found in library. Collection will be empty.");
+                    return;
+                }
+
+                // Take the first 5 alphabetical movies
+                var selectedMovies = movies.Take(config.MovieCount).ToList();
+
+                _logger.Info($"Selected {selectedMovies.Count} movies for collection:");
+                foreach (var movie in selectedMovies)
+                {
+                    _logger.Info($"  - {movie.Name} (Year: {movie.ProductionYear})");
+                }
+
+                // Check if collection already exists
+                var existingCollections = _collectionManager.GetCollections(null);
+                var existingCollection = existingCollections.FirstOrDefault(c =>
+                    c.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+
+                if (existingCollection != null)
+                {
+                    _logger.Info($"Collection '{collectionName}' already exists. Updating items...");
+
+                    // Remove all existing items from the collection
+                    var currentItems = existingCollection.GetLinkedChildren().ToList();
+                    if (currentItems.Any())
+                    {
+                        await _collectionManager.RemoveFromCollection(
+                            existingCollection.Id,
+                            currentItems.Select(i => i.Id).ToArray());
+                    }
+
+                    // Add the new items
+                    await _collectionManager.AddToCollection(
+                        existingCollection.Id,
+                        selectedMovies.Select(m => m.Id).ToArray());
+
+                    _logger.Info($"Collection '{collectionName}' updated successfully with {selectedMovies.Count} movies");
+                }
+                else
+                {
+                    _logger.Info($"Creating new collection '{collectionName}'...");
+
+                    // Create new collection
+                    var collection = await _collectionManager.CreateCollection(new CollectionCreationOptions
+                    {
+                        Name = collectionName,
+                        ItemIdList = selectedMovies.Select(m => m.Id.ToString("N")).ToArray()
+                    });
+
+                    _logger.Info($"Collection '{collectionName}' created successfully with {selectedMovies.Count} movies");
                 }
             }
             catch (Exception ex)
             {
-                _logger.ErrorException("Error initializing recommendation collection", ex);
+                _logger.ErrorException("Error creating test collection", ex);
             }
         }
 
         public void Dispose()
         {
-            if (_libraryManager != null)
-            {
-                _libraryManager.ItemAdded -= OnLibraryItemAdded;
-                _libraryManager.ItemRemoved -= OnLibraryItemRemoved;
-            }
-            
-            _logger.Info("Recommendation Plugin shutting down");
+            _logger.Info("Test Collection Plugin shutting down");
         }
     }
 }
